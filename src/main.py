@@ -7,13 +7,24 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from stores.llm import LLMProviderFactory
 from stores.vectordb import VectorDBProviderFactory
 from stores.llm.system_templates import TemplateParser
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    
+    postgres_conn = f"postgresql+asyncpg://{settings.POSTGRES_USERNAME}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_MAIN_DATABASE}"
+    
+    app.db_engine = create_async_engine( url= postgres_conn )
+    app.db_client = sessionmaker(
+        app.db_engine, class_= AsyncSession, expire_on_commit= False   
+    )
+    
+    
     app.mongo_conn = AsyncIOMotorClient( host = settings.MONGODB_URL )
-    app.db_client = app.mongo_conn[ settings.MONGODB_DATABASE ]
+    #app.db_client = app.mongo_conn[ settings.MONGODB_DATABASE ]
     
     llm_provider_factory = LLMProviderFactory( config= settings )
     
@@ -33,8 +44,10 @@ async def lifespan(app: FastAPI):
     )
     
     yield
-    app.mongo_conn.close() 
+    app.mongo_conn.close()
+    app.db_engine.dispose() 
     app.vector_db_client.disconnect()
+    
     
 
 # uvicorn main:app --reload
