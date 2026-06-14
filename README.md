@@ -168,7 +168,7 @@ Language settings:
 ### 1. Clone the repository
 
 ```bash
-git clone <repository-url>
+git clone [<repository-url>](https://github.com/Mrwanawad/Naive-RAG-System-Using---MongoDB---Multi-LLM-Providers.git)
 cd mini-RAG
 ```
 
