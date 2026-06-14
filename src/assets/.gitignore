@@ -1,2 +1,4 @@
-files
-database
+files/*
+!files/.gitignore
+database/*
+!database/.gitignore

@@ -1,0 +1,11 @@
+.git
+.gitignore
+.vscode
+.venv
+__pycache__
+*.py[cod]
+*.log
+.env
+docker/.env
+src/assets/files
+src/assets/database

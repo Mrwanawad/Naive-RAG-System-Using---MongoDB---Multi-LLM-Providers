@@ -208,10 +208,22 @@ __marimo__/
 
 # UV
 .uv/
-uv.lock           
 
 # VS Code
 .vscode/           
+
+# Local Python runtime and editor metadata
+.python-version
+
+# Project runtime data
+src/assets/files/*
+!src/assets/files/.gitignore
+src/assets/database/*
+!src/assets/database/.gitignore
+
+# Local environment files
+.env
+docker/.env
 
 # Logs & temp
 *.log

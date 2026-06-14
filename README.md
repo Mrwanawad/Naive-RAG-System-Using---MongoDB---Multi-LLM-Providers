@@ -1,173 +1,289 @@
-# mini-rag
+# mini-RAG
 
-mini-rag is a FastAPI-based RAG backend that ingests files, stores project assets in MongoDB, splits documents into chunks, and indexes those chunks into a local Qdrant vector database. The generation and embedding layer is provider-driven, so the same application can run against OpenAI, Cohere, or OpenRouter-backed models through a common interface.
+`mini-RAG` is a modular Retrieval-Augmented Generation backend built with FastAPI. It ingests local documents, stores metadata in MongoDB, chunks and persists text, indexes embeddings in a vector database, and answers queries through pluggable LLM providers.
 
-## What Changed From The Earlier README
+## What This Project Does
 
-The previous README only covered Docker commands. The current project now has:
+The application is designed around a simple RAG pipeline:
 
-- a full API surface for upload, processing, indexing, and search
-- MongoDB-backed persistence for projects, assets, and chunks
-- a vector-store abstraction with a Qdrant implementation
-- an LLM abstraction with factory-based provider selection
-- file processing for TXT and PDF inputs
+1. Upload a document to a project.
+2. Store the original file on disk and record its metadata in MongoDB.
+3. Process the file into chunks.
+4. Push the chunks into a vector database with embeddings.
+5. Search the indexed content or generate an answer with retrieved context.
+
+## Tech Stack
+
+- Python 3.12+
+- FastAPI for the HTTP API
+- Uvicorn for the ASGI server
+- MongoDB via `motor` for project, asset, and chunk metadata
+- PostgreSQL support is initialized through `sqlalchemy` and `asyncpg`
+- Qdrant for vector storage
+- LangChain document loaders and text splitters
+- OpenAI, Cohere, and OpenRouter as LLM/embedding backends
 
 ## Architecture
 
-The project follows a layered design:
+This codebase follows a layered, provider-driven architecture:
 
-- `routes` expose HTTP endpoints and validate request payloads.
-- `controllers` contain workflow logic and coordinate storage, parsing, and indexing.
-- `models` encapsulate MongoDB access and domain schemas.
-- `stores` hold provider abstractions and concrete adapters for LLM and vector DB backends.
-- `helpers` centralize application settings and environment configuration.
+- API layer: `src/routes/*`
+- Controller layer: `src/controllers/*`
+- Data/model layer: `src/models/*`
+- Infrastructure layer: `src/stores/*`
+- Configuration layer: `src/helpers/config.py`
 
-The main pattern choices are:
+### Request Flow
 
-- Factory pattern for provider creation
-- Interface/adapter pattern for LLM and vector DB backends
-- Controller/service style orchestration for request workflows
-- FastAPI lifespan hooks for application bootstrap and shutdown
+1. `src/main.py` creates the FastAPI app and initializes services in `lifespan`.
+2. Route handlers accept requests and call controllers.
+3. Controllers handle file validation, project paths, document processing, vector indexing, and RAG prompt assembly.
+4. Models encapsulate MongoDB collections and schema validation.
+5. Store providers abstract LLM and vector DB vendors behind interfaces and factories.
 
-## Request Flow
+### Design Patterns Used
 
-1. A client uploads a file to a project.
-2. The file is written to the project asset directory and registered in MongoDB.
-3. The processing endpoint loads the file with the correct loader based on extension.
-4. The text is chunked with `RecursiveCharacterTextSplitter`.
-5. Chunks are stored in MongoDB.
-6. The vector-store endpoint embeds each chunk and pushes vectors to Qdrant.
-7. The search endpoint embeds the query and retrieves the closest matches from Qdrant.
+- Factory pattern
+  - `LLMProviderFactory` selects OpenAI, Cohere, or OpenRouter providers.
+  - `VectorDBProviderFactory` selects the vector database implementation.
+- Strategy pattern
+  - LLM and vector DB providers are swappable implementations behind shared interfaces.
+- Layered architecture
+  - Routes do not talk directly to databases or providers.
+- Adapter-style abstraction
+  - Provider classes normalize different vendor APIs behind one internal contract.
+- Template-driven prompting
+  - `TemplateParser` resolves multilingual prompt templates for RAG generation.
 
-## Project Structure
+## Supported Capabilities
+
+- Upload documents per project
+- Validate file type and file size before storage
+- Process `.txt` and `.pdf` files
+- Chunk document content with configurable chunk size and overlap
+- Store file and chunk metadata in MongoDB
+- Index chunks into Qdrant with embeddings
+- Search the vector index by semantic similarity
+- Generate RAG answers from retrieved chunks
+- Switch LLM and embedding providers without changing the route layer
+- Support English and Arabic prompt templates
+
+## Repository Structure
 
 ```text
-src/
-  main.py
-  helpers/
-    config.py
-  routes/
-    base.py
-    data.py
-    vector_store.py
-    schemas/
-  controllers/
-    BaseController.py
-    DataController.py
-    ProcessController.py
-    ProjectCntroller.py
-    VectorStoreController.py
-  models/
-    BaseDataModel.py
-    ProjectModel.py
-    AssetModel.py
-    ChunkModel.py
-    db_schemas/
-    enums/
-  stores/
-    llm/
-      LLMInterface.py
-      LLMProviderFactory.py
-      providers/
-    vectordb/
-      VectorDBInterface.py
-      VectorDBProviderFactory.py
-      providers/
+.
+├── main.py
+├── src
+│   ├── main.py
+│   ├── controllers
+│   ├── helpers
+│   ├── models
+│   ├── routes
+│   └── stores
+├── docker
+├── pyproject.toml
+├── uv.lock
+└── .env.example
 ```
 
-## Core Modules
+### Key Modules
 
-### `src/main.py`
+- `src/main.py`
+  - Application startup, dependency wiring, and service lifecycle management.
+- `src/routes/data.py`
+  - File upload and document processing endpoints.
+- `src/routes/vector_store.py`
+  - Indexing, search, and RAG answer endpoints.
+- `src/controllers/ProcessController.py`
+  - Loads documents and splits them into chunks.
+- `src/controllers/VectorStoreController.py`
+  - Embeds text, stores vectors, searches, and builds RAG prompts.
+- `src/models/*`
+  - MongoDB schemas and collection access helpers.
+- `src/stores/llm/*`
+  - Vendor-neutral LLM abstraction and provider implementations.
+- `src/stores/vectordb/*`
+  - Vector database abstraction and Qdrant implementation.
 
-Bootstraps the application, initializes external clients in a FastAPI lifespan handler, and registers the routers.
+## Prerequisites
 
-### Controllers
+Before running the project, install:
 
-- `DataController` validates uploads and generates unique file names.
-- `ProcessController` resolves the file loader and builds chunk documents.
-- `VectorStoreController` handles collection naming, indexing, reset, and similarity search.
-- `ProjectController` resolves the filesystem location for project data.
-
-### Storage Layer
-
-MongoDB stores the application data model:
-
-- projects
-- assets
-- document chunks
-
-Qdrant stores vector embeddings and supports similarity search by collection.
-
-### LLM Layer
-
-The LLM layer is provider-agnostic:
-
-- `LLMInterface` defines the contract
-- `LLMProviderFactory` chooses the concrete provider
-- `OpenAIProvider`, `CoHereProvider`, and `OpenRouterProvider` implement generation and embeddings
-
-The generation and embedding clients are configured separately, so the app can mix providers if needed.
-
-### Vector DB Layer
-
-The vector database abstraction is also provider-based:
-
-- `VectorDBInterface` defines collection and query operations
-- `VectorDBProviderFactory` creates the configured backend
-- `QdrantDBProvider` implements collection management, bulk insert, and search
-
-## API Endpoints
-
-### Data
-
-- `POST /api/v1/data/upload{project_id}`: upload a file into a project
-- `POST /api/v1/data/process/{project_id}`: load, split, and store chunks
-
-### Vector Store
-
-- `POST /api/v1/vector-store/index/push/{project_id}`: embed stored chunks and push them into Qdrant
-- `GET /api/v1/vector-store/index/push/{project_id}`: return collection information
-- `POST /api/v1/vector-store/index/search/{project_id}`: run similarity search against the project collection
+- Python 3.12 or newer
+- `uv`
+- MongoDB
+- PostgreSQL
+- Qdrant
+- API keys for the LLM provider you want to use
 
 ## Configuration
 
-Settings are loaded through `pydantic-settings` from the project `.env` file.
+Create a `.env` file at the project root. Use `.env.example` as the starting point.
 
-Required groups of settings include:
+Minimum required settings depend on the backend you select, but the application expects values such as:
 
-- application identity: `APP_NAME`, `APP_VERSION`
-- file controls: `FILE_ALLOWED_TYPES`, `FILE_MAX_SIZE`, `FILE_DEFAULT_CHUNK_SIZE`
-- MongoDB: `MONGODB_URL`, `MONGODB_DATABASE`
-- LLM selection: `GENERATION_BACKEND`, `EMBEDDING_BACKEND`
-- model configuration: `GENERATION_MODEL_ID`, `EMBEDDING_MODEL_ID`, `EMBEDDING_MODEL_SIZE`
-- provider credentials: `OPENAI_API_KEY`, `COHERE_API_KEY`, `OPENROUTER_API_KEY`
-- vector DB configuration: `VECTOR_DB_BACKEND`, `VECTOR_DB_PATH`, `VECTOR_DB_DISTANCE_METHOD`
+- `APP_NAME`
+- `APP_VERSION`
+- `MONGODB_URL`
+- `MONGODB_DATABASE`
+- `POSTGRES_USERNAME`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
+- `POSTGRES_MAIN_DATABASE`
+- `GENERATION_BACKEND`
+- `EMBEDDING_BACKEND`
+- `VECTOR_DB_BACKEND`
 
-## Dependencies
+Provider-specific settings may also be required:
 
-The current stack uses:
+- OpenAI
+  - `OPENAI_API_KEY`
+  - `OPENAI_BASE_URL`
+- Cohere
+  - `COHERE_API_KEY`
+- OpenRouter
+  - `OPENROUTER_API_KEY`
+  - `OPENROUTER_GENERATION_API_URL`
+  - `OPENROUTER_EMBEDDING_API_URL`
 
-- `fastapi`
-- `uvicorn`
-- `motor`
-- `aiofiles`
-- `pymupdf`
-- `langchain`
-- `langchain-community`
-- `openai`
-- `cohere`
-- `qdrant-client`
-- `pydantic-settings`
+Vector DB settings:
 
-## Development Notes
+- `VECTOR_DB_PATH`
+- `VECTOR_DB_DISTANCE_METHOD`
 
-- Text files are loaded with `TextLoader`.
-- PDFs are loaded with `PyMuPDFLoader`.
-- Chunk metadata is preserved and enriched with `file_id`.
-- Vector point IDs are generated deterministically from collection and chunk metadata.
-- Collection reset is supported both at processing time and indexing time.
+Document processing settings:
 
-## Docker
+- `FILE_ALLOWED_TYPES`
+- `FILE_MAX_SIZE`
+- `FILE_DEFAULT_CHUNK_SIZE`
 
-The repository includes Docker-related assets, but the current README does not assume one fixed deployment path. Use the environment file that matches your runtime target and make sure MongoDB and Qdrant are reachable before starting the API.
+Language settings:
+
+- `PRIMARY_LANG`
+- `DEFAULT_LANG`
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd mini-RAG
+```
+
+### 2. Install `uv`
+
+If `uv` is not already installed:
+
+```bash
+pip install uv
+```
+
+### 3. Create and sync the environment
+
+```bash
+uv sync
+```
+
+This installs the dependencies from `pyproject.toml` and `uv.lock` into a managed virtual environment.
+
+### 4. Configure environment variables
+
+Copy `.env.example` to `.env` and fill in the required values for your local services and provider keys.
+
+## Running the Project
+
+Start the API with:
+
+```bash
+cd src
+uv run uvicorn main:app --reload
+```
+
+The FastAPI application is defined in `main.py`.
+
+## API Overview
+
+Base prefix: `/api/v1`
+
+### `GET /api/v1/`
+
+Returns application name and version.
+
+### `POST /api/v1/data/upload/{project_id}`
+
+Uploads a file for a project, validates it, stores it on disk, and records the asset in MongoDB.
+
+### `POST /api/v1/data/process/{project_id}`
+
+Processes uploaded project files into chunks and stores them in MongoDB.
+
+Parameters:
+
+- `file_id` to process a single file
+- `chunk_size`
+- `chunk_overlap`
+- `do_reset` to clear existing chunks and vector data
+
+### `POST /api/v1/vector-store/index/push/{project_id}`
+
+Embeds stored chunks and pushes them into the vector database.
+
+### `GET /api/v1/vector-store/index/push/{project_id}`
+
+Returns collection information for the project vector index.
+
+### `POST /api/v1/vector-store/index/search/{project_id}`
+
+Runs semantic search over the project vector collection.
+
+### `POST /api/v1/vector-store/index/answer/{project_id}`
+
+Runs the full RAG pipeline and returns the answer, assembled prompt, and chat history.
+
+## Data Flow Details
+
+### Upload
+
+- Files are validated by content type and size.
+- The file is saved under `src/assets/files/{project_id}`.
+- A generated file name is used to avoid collisions.
+- A record is created in the `assets` collection.
+
+### Processing
+
+- `.txt` files are loaded with `TextLoader`.
+- `.pdf` files are loaded with `PyMuPDFLoader`.
+- Text is split with `RecursiveCharacterTextSplitter`.
+- Chunk metadata is preserved and augmented with `file_id`.
+- Chunks are saved in the `chunks` collection.
+
+### Indexing
+
+- Each chunk is embedded through the configured LLM provider.
+- Vector points are written to the configured Qdrant collection.
+- Collection names follow the pattern `collection_{project_id}`.
+
+### Answering
+
+- The query is embedded.
+- Similar chunks are retrieved from Qdrant.
+- Prompt templates are resolved from the locale system.
+- The final prompt is sent to the generation provider.
+
+## Provider Support
+
+### LLM Providers
+
+- OpenAI
+- Cohere
+- OpenRouter
+
+### Vector Database
+
+- Qdrant
+
+
+
 
