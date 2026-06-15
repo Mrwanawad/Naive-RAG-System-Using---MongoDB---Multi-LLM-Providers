@@ -1,6 +1,6 @@
-# mini-RAG
+# Retrievel Augmented Generation For LLM Augmented Answers
 
-`mini-RAG` is a modular Retrieval-Augmented Generation backend built with FastAPI. It ingests local documents, stores metadata in MongoDB, chunks and persists text, indexes embeddings in a vector database, and answers queries through pluggable LLM providers.
+Modular Retrieval-Augmented Generation backend built with FastAPI. It ingests local documents, stores metadata in MongoDB, chunks and persists text, indexes embeddings in a vector database, and answers queries through pluggable LLM providers.
 
 ## What This Project Does
 
@@ -18,7 +18,6 @@ The application is designed around a simple RAG pipeline:
 - FastAPI for the HTTP API
 - Uvicorn for the ASGI server
 - MongoDB via `motor` for project, asset, and chunk metadata
-- PostgreSQL support is initialized through `sqlalchemy` and `asyncpg`
 - Qdrant for vector storage
 - LangChain document loaders and text splitters
 - OpenAI, Cohere, and OpenRouter as LLM/embedding backends
@@ -112,7 +111,6 @@ Before running the project, install:
 - Python 3.12 or newer
 - `uv`
 - MongoDB
-- PostgreSQL
 - Qdrant
 - API keys for the LLM provider you want to use
 
@@ -126,11 +124,6 @@ Minimum required settings depend on the backend you select, but the application 
 - `APP_VERSION`
 - `MONGODB_URL`
 - `MONGODB_DATABASE`
-- `POSTGRES_USERNAME`
-- `POSTGRES_PASSWORD`
-- `POSTGRES_HOST`
-- `POSTGRES_PORT`
-- `POSTGRES_MAIN_DATABASE`
 - `GENERATION_BACKEND`
 - `EMBEDDING_BACKEND`
 - `VECTOR_DB_BACKEND`
